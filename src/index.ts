@@ -58,7 +58,7 @@ export const startServer = async () => {
     await tradingService.initialize();
     // Start WebSocket connection
     await setupWebSocket(tradingService);
-    
+
     // Start HTTP server
     const server = app.listen(config.server.port, () => {
       console.log(`Server is running on port ${config.server.port}`);
@@ -78,7 +78,6 @@ export const startServer = async () => {
 
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
-
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

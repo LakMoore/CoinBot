@@ -29,7 +29,9 @@ const config: Config = {
   coinbase: {
     apiKey: process.env.COINBASE_API_KEY || '',
     apiSecret: process.env.COINBASE_API_SECRET || '',
-    baseUrl: process.env.COINBASE_API_BASE_URL || 'https://api-sandbox.coinbase.com/api/v3/brokerage/',
+    baseUrl:
+      process.env.COINBASE_API_BASE_URL ||
+      'https://api-sandbox.coinbase.com/api/v3/brokerage/',
   },
   trading: {
     pair: process.env.TRADING_PAIR || 'BTC-GBP',
@@ -38,7 +40,9 @@ const config: Config = {
   },
   trailingStop: {
     percentage: parseFloat(process.env.TRAILING_STOP_PERCENT || '2.0'),
-    activationThreshold: parseFloat(process.env.ACTIVATION_THRESHOLD_PERCENT || '1.0'),
+    activationThreshold: parseFloat(
+      process.env.ACTIVATION_THRESHOLD_PERCENT || '1.0'
+    ),
   },
   server: {
     port: parseInt(process.env.PORT || '3000', 10),

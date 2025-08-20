@@ -20,7 +20,8 @@ export class PriceService {
   // Fetch map: 1 <currency> = rate[<toCurrency>] units
   // We need GBP conversions; use Coinbase v2 exchange rates
   async getFiatToGBP(): Promise<RatesMap> {
-    if (this.lastFiatRates && this.isFresh(this.lastFiatAt)) return this.lastFiatRates;
+    if (this.lastFiatRates && this.isFresh(this.lastFiatAt))
+      return this.lastFiatRates;
     // API gives: base currency -> map of conversions
     // We'll fetch rates with base=GBP, then invert
     const url = 'https://api.coinbase.com/v2/exchange-rates?currency=GBP';
@@ -44,7 +45,8 @@ export class PriceService {
   // Spot price for CRYPTO-GBP (or fallback CRYPTO-USD then convert)
   async getCryptoGbpPrice(symbol: string): Promise<number | null> {
     const ts = this.lastCryptoAt[symbol] || 0;
-    if (this.lastCryptoRatesGBP[symbol] && this.isFresh(ts)) return this.lastCryptoRatesGBP[symbol];
+    if (this.lastCryptoRatesGBP[symbol] && this.isFresh(ts))
+      return this.lastCryptoRatesGBP[symbol];
 
     // Try direct GBP pair
     const gbpUrl = `https://api.coinbase.com/v2/prices/${symbol}-GBP/spot`;

@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { getStatus, executeBuy, executeSell, getHistoricalData } from '../controllers/tradingController';
+import {
+  getStatus,
+  executeBuy,
+  executeSell,
+  getHistoricalData,
+} from '../controllers/tradingController';
 
 const router = Router();
 

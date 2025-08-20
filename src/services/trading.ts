@@ -1,5 +1,10 @@
 import config from '../config';
-import { CoinbaseAdvTradeClient, CoinbaseAdvTradeCredentials, OrdersService, AccountsService } from '@coinbase-sample/advanced-trade-sdk-ts';
+import {
+  CoinbaseAdvTradeClient,
+  CoinbaseAdvTradeCredentials,
+  OrdersService,
+  AccountsService,
+} from '@coinbase-sample/advanced-trade-sdk-ts';
 import { OrderSide } from '@coinbase-sample/advanced-trade-sdk-ts/dist/model/enums/OrderSide';
 import { EventEmitter } from 'events';
 import { PriceService } from './prices';
@@ -25,16 +30,31 @@ export class TradingService {
   private prices = new PriceService(60 * 1000);
   private portfolio: {
     fiat: Array<{ currency: string; amount: number; gbpValue: number }>;
-    crypto: Array<{ asset: string; amount: number; gbpPrice: number | null; gbpValue: number | null; avgEntryGbp?: number | null; pnlGbp?: number | null; pnlPct?: number | null }>;
+    crypto: Array<{
+      asset: string;
+      amount: number;
+      gbpPrice: number | null;
+      gbpValue: number | null;
+      avgEntryGbp?: number | null;
+      pnlGbp?: number | null;
+      pnlPct?: number | null;
+    }>;
     totals: { fiatGbp: number; cryptoGbp: number; grandGbp: number };
-  } = { fiat: [], crypto: [], totals: { fiatGbp: 0, cryptoGbp: 0, grandGbp: 0 } };
+  } = {
+    fiat: [],
+    crypto: [],
+    totals: { fiatGbp: 0, cryptoGbp: 0, grandGbp: 0 },
+  };
 
   constructor() {
-    const normalizedSecret = (config.coinbase.apiSecret || '').replace(/\\n/g, '\n');
+    const normalizedSecret = (config.coinbase.apiSecret || '').replace(
+      /\\n/g,
+      '\n'
+    );
     const credentials = new CoinbaseAdvTradeCredentials(
-        config.coinbase.apiKey,
-        normalizedSecret,
-      );
+      config.coinbase.apiKey,
+      normalizedSecret
+    );
     // this.client = new CoinbaseAdvTradeClient(credentials, config.coinbase.baseUrl);
     this.client = new CoinbaseAdvTradeClient(credentials);
     this.ordersService = new OrdersService(this.client);
@@ -46,7 +66,9 @@ export class TradingService {
     await this.refreshBalances();
     // Poll balances periodically
     this.balancePollTimer = setInterval(() => {
-      this.refreshBalances().catch((e) => console.error('Balance refresh failed:', e));
+      this.refreshBalances().catch((e) =>
+        console.error('Balance refresh failed:', e)
+      );
     }, 30 * 1000);
     console.log('Trading service initialized');
   }
@@ -57,7 +79,8 @@ export class TradingService {
       clearInterval(this.balancePollTimer);
       this.balancePollTimer = null;
     }
-    console.log('Cleaning up trading service');  }
+    console.log('Cleaning up trading service');
+  }
 
   public async executeBuy(amount: number) {
     try {
@@ -136,9 +159,12 @@ export class TradingService {
       }
 
       // Check if stop loss is triggered
-      if (currentPrice <= this.trailingStopPrice && this.trailingStopPrice > 0) {
+      if (
+        currentPrice <= this.trailingStopPrice &&
+        this.trailingStopPrice > 0
+      ) {
         console.log(`Stop loss triggered at ${currentPrice}`);
-        this.executeSell(0/* amount */);
+        this.executeSell(0 /* amount */);
       }
     }
     // Emit on every price update so UI stays current
@@ -147,9 +173,11 @@ export class TradingService {
 
   private updateTrailingStop() {
     if (this.highestPrice > 0) {
-      const activationPrice = this.highestPrice * (1 - config.trailingStop.activationThreshold / 100);
-      this.trailingStopPrice = this.highestPrice * (1 - config.trailingStop.percentage / 100);
-      
+      const activationPrice =
+        this.highestPrice * (1 - config.trailingStop.activationThreshold / 100);
+      this.trailingStopPrice =
+        this.highestPrice * (1 - config.trailingStop.percentage / 100);
+
       if (!this.isActive && this.highestPrice >= activationPrice) {
         this.isActive = true;
         console.log('Trailing stop activated');
@@ -176,7 +204,9 @@ export class TradingService {
     };
   }
 
-  public onStatus(listener: (status: ReturnType<TradingService['getStatus']>) => void) {
+  public onStatus(
+    listener: (status: ReturnType<TradingService['getStatus']>) => void
+  ) {
     this.emitter.on('status', listener);
     return () => this.emitter.off('status', listener);
   }
@@ -206,16 +236,24 @@ export class TradingService {
   private async refreshBalances() {
     try {
       let cursor: string | undefined = undefined;
-      const accs: Array<{ currency?: string; availableBalance?: { value?: string } }> = [];
+      const accs: Array<{
+        currency?: string;
+        availableBalance?: { value?: string };
+      }> = [];
       do {
-        const resp = await this.accountsService.listAccounts({ limit: 250, cursor });
+        const resp = await this.accountsService.listAccounts({
+          limit: 250,
+          cursor,
+        });
         if (this.hasAccounts(resp)) {
           accs.push(...(resp.accounts || []));
           cursor = resp.hasNext ? resp.cursor : undefined;
         } else {
           // If SDK returned an exception type, stop paging
           cursor = undefined;
-          console.error('AccountsService.listAccounts returned error-like response');
+          console.error(
+            'AccountsService.listAccounts returned error-like response'
+          );
         }
       } while (cursor);
 
@@ -236,14 +274,33 @@ export class TradingService {
   }
 
   private isFiat(ccy: string): boolean {
-    const FIAT = new Set(['GBP','USD','EUR','AUD','CAD','CHF','JPY','NZD','SGD']);
+    const FIAT = new Set([
+      'GBP',
+      'USD',
+      'EUR',
+      'AUD',
+      'CAD',
+      'CHF',
+      'JPY',
+      'NZD',
+      'SGD',
+    ]);
     return FIAT.has(ccy.toUpperCase());
   }
 
   private async recomputePortfolio() {
     const fx = await this.prices.getFiatToGBP();
-    const fiat: Array<{ currency: string; amount: number; gbpValue: number }> = [];
-    const crypto: Array<{ asset: string; amount: number; gbpPrice: number | null; gbpValue: number | null; avgEntryGbp?: number | null; pnlGbp?: number | null; pnlPct?: number | null }> = [];
+    const fiat: Array<{ currency: string; amount: number; gbpValue: number }> =
+      [];
+    const crypto: Array<{
+      asset: string;
+      amount: number;
+      gbpPrice: number | null;
+      gbpValue: number | null;
+      avgEntryGbp?: number | null;
+      pnlGbp?: number | null;
+      pnlPct?: number | null;
+    }> = [];
 
     for (const [ccy, amt] of Object.entries(this.balances)) {
       if (!amt || !isFinite(amt) || amt <= 0) continue;
@@ -254,17 +311,29 @@ export class TradingService {
       } else {
         const gbpPrice = await this.prices.getCryptoGbpPrice(ccy);
         const gbpValue = gbpPrice != null ? amt * gbpPrice : null;
-        crypto.push({ asset: ccy, amount: amt, gbpPrice, gbpValue, avgEntryGbp: null, pnlGbp: null, pnlPct: null });
+        crypto.push({
+          asset: ccy,
+          amount: amt,
+          gbpPrice,
+          gbpValue,
+          avgEntryGbp: null,
+          pnlGbp: null,
+          pnlPct: null,
+        });
       }
     }
 
     // sort by value desc
-    fiat.sort((a,b) => b.gbpValue - a.gbpValue);
-    crypto.sort((a,b) => (b.gbpValue ?? 0) - (a.gbpValue ?? 0));
+    fiat.sort((a, b) => b.gbpValue - a.gbpValue);
+    crypto.sort((a, b) => (b.gbpValue ?? 0) - (a.gbpValue ?? 0));
 
     const fiatGbp = fiat.reduce((s, r) => s + (r.gbpValue || 0), 0);
     const cryptoGbp = crypto.reduce((s, r) => s + (r.gbpValue || 0), 0);
-    this.portfolio = { fiat, crypto, totals: { fiatGbp, cryptoGbp, grandGbp: fiatGbp + cryptoGbp } };
+    this.portfolio = {
+      fiat,
+      crypto,
+      totals: { fiatGbp, cryptoGbp, grandGbp: fiatGbp + cryptoGbp },
+    };
 
     // Enrich crypto with avg entry and returns using fills
     await this.enrichCryptoWithCostBasis();
@@ -286,7 +355,10 @@ export class TradingService {
         const gbpMarket = `${asset}-GBP`;
         const usdMarket = `${asset}-USD`;
         const eurMarket = `${asset}-EUR`;
-        const ordersRaw = await this.fetchAllOrders({ productIds: [gbpMarket, usdMarket, eurMarket], limit: 250 });
+        const ordersRaw = await this.fetchAllOrders({
+          productIds: [gbpMarket, usdMarket, eurMarket],
+          limit: 250,
+        });
         // Filter strictly to this asset and a fiat quote that we have an FX rate for
         const fxMap = fx || {};
         const orders = (ordersRaw || []).filter((o: Order) => {
@@ -306,38 +378,61 @@ export class TradingService {
         }
 
         // Sort by createdTime ascending
-        orders.sort((a: Order, b: Order) => Date.parse(a.createdTime || '') - Date.parse(b.createdTime || ''));
+        orders.sort(
+          (a: Order, b: Order) =>
+            Date.parse(a.createdTime || '') - Date.parse(b.createdTime || '')
+        );
 
         // Build FIFO lots from BUY orders using filledSize and averageFilledPrice (already GBP); consume with SELL orders
         type Lot = { qty: number; priceGbp: number };
         const lots: Lot[] = [];
         for (const o of orders) {
           const status = (o.status || '').toString().toUpperCase();
-          if (status !== 'FILLED' && status !== 'CANCELLED' && status !== 'EXPIRED' && status !== 'OPEN') {
+          if (
+            status !== 'FILLED' &&
+            status !== 'CANCELLED' &&
+            status !== 'EXPIRED' &&
+            status !== 'OPEN'
+          ) {
             // proceed; we rely on filledSize
           }
           const side = (o.side || '').toString().toUpperCase();
           const qty = parseFloat(o.filledSize || '0');
           const avgPx = parseFloat(o.averageFilledPrice || '0');
-          const totalFees = this.toNumber((o as unknown as { totalFees?: unknown }).totalFees);
-          const totalAfterFees = this.toNumber((o as unknown as { totalValueAfterFees?: unknown }).totalValueAfterFees);
-          const filledValue = this.toNumber((o as unknown as { filledValue?: unknown }).filledValue);
+          const totalFees = this.toNumber(
+            (o as unknown as { totalFees?: unknown }).totalFees
+          );
+          const totalAfterFees = this.toNumber(
+            (o as unknown as { totalValueAfterFees?: unknown })
+              .totalValueAfterFees
+          );
+          const filledValue = this.toNumber(
+            (o as unknown as { filledValue?: unknown }).filledValue
+          );
           if (!isFinite(qty) || qty <= 0) continue; // only filled quantities matter
           // Determine quote currency and conversion to GBP
           const pid = (o.productId || '').toUpperCase();
           const parts2 = pid.split('-');
           const quote = parts2.length === 2 ? parts2[1] : 'GBP';
-          const conv = quote === 'GBP' ? 1 : (fx[quote] || 0);
+          const conv = quote === 'GBP' ? 1 : fx[quote] || 0;
           if (!conv) continue; // unknown quote currency; skip
           // Compute per-unit price in quote ccy first, then convert to GBP, including commissions for BUY
           let unitPriceQuote = isFinite(avgPx) ? avgPx : NaN;
           if (side === 'BUY') {
             if (isFinite(totalAfterFees) && totalAfterFees > 0) {
               unitPriceQuote = totalAfterFees / qty;
-            } else if (isFinite(filledValue) && isFinite(totalFees) && (filledValue + totalFees) > 0) {
+            } else if (
+              isFinite(filledValue) &&
+              isFinite(totalFees) &&
+              filledValue + totalFees > 0
+            ) {
               unitPriceQuote = (filledValue + totalFees) / qty;
-            } else if (isFinite(avgPx) && isFinite(totalFees) && totalFees > 0) {
-              unitPriceQuote = avgPx + (totalFees / qty);
+            } else if (
+              isFinite(avgPx) &&
+              isFinite(totalFees) &&
+              totalFees > 0
+            ) {
+              unitPriceQuote = avgPx + totalFees / qty;
             }
           }
           if (!isFinite(unitPriceQuote) || unitPriceQuote <= 0) continue;
@@ -374,13 +469,19 @@ export class TradingService {
           targetQty -= use;
         }
         const effectiveQty = Math.min(row.amount, qtyOpen);
-        const avgEntryGbp = effectiveQty > 0 ? totalCostGbp / effectiveQty : null;
+        const avgEntryGbp =
+          effectiveQty > 0 ? totalCostGbp / effectiveQty : null;
         row.avgEntryGbp = avgEntryGbp;
-        if (avgEntryGbp != null && row.gbpPrice != null && isFinite(row.gbpPrice)) {
+        if (
+          avgEntryGbp != null &&
+          row.gbpPrice != null &&
+          isFinite(row.gbpPrice)
+        ) {
           const pnlPerUnit = row.gbpPrice - avgEntryGbp;
           const pnlGbp = pnlPerUnit * effectiveQty;
           row.pnlGbp = pnlGbp;
-          row.pnlPct = avgEntryGbp > 0 ? (pnlPerUnit / avgEntryGbp) * 100 : null;
+          row.pnlPct =
+            avgEntryGbp > 0 ? (pnlPerUnit / avgEntryGbp) * 100 : null;
         } else {
           row.pnlGbp = null;
           row.pnlPct = null;
@@ -412,13 +513,20 @@ export class TradingService {
 
   private async fetchAllOrders(params: ListOrdersRequest): Promise<Order[]> {
     const all: Order[] = [];
-    const pids = params.productIds && params.productIds.length ? params.productIds : undefined;
+    const pids =
+      params.productIds && params.productIds.length
+        ? params.productIds
+        : undefined;
     // If multiple productIds are provided, fetch each separately to avoid server ignoring the filter
     const loopOver = pids ?? [undefined];
     for (const pid of loopOver) {
       let cursor: string | undefined = undefined;
       do {
-        const req: ListOrdersRequest = { ...params, productIds: pid ? [pid] : undefined, cursor };
+        const req: ListOrdersRequest = {
+          ...params,
+          productIds: pid ? [pid] : undefined,
+          cursor,
+        };
         const resp: unknown = await this.ordersService.listOrders(req);
         if (this.hasOrders(resp)) {
           const orders = (resp.orders || []) as Order[];
@@ -433,7 +541,16 @@ export class TradingService {
   }
 
   // --- Type guards & helpers to avoid explicit any ---
-  private hasAccounts(x: unknown): x is { accounts?: Array<{ currency?: string; availableBalance?: { value?: string } }>; hasNext?: boolean; cursor?: string } {
+  private hasAccounts(
+    x: unknown
+  ): x is {
+    accounts?: Array<{
+      currency?: string;
+      availableBalance?: { value?: string };
+    }>;
+    hasNext?: boolean;
+    cursor?: string;
+  } {
     if (!x || typeof x !== 'object') return false;
     const obj = x as { accounts?: unknown };
     if (!('accounts' in obj)) return false;
@@ -466,4 +583,3 @@ export class TradingService {
     return NaN;
   }
 }
-

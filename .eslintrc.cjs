@@ -23,7 +23,15 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'error',
     '@typescript-eslint/ban-ts-comment': ['warn', { 'ts-ignore': 'allow-with-description' }],
     '@typescript-eslint/consistent-type-imports': 'warn',
-    'prettier/prettier': 'warn',
+    // Ensure Prettier uses single quotes and LF consistently
+    'prettier/prettier': [
+      'warn',
+      {
+        singleQuote: true,
+        jsxSingleQuote: false,
+        endOfLine: 'lf',
+      },
+    ],
     quotes: ['error', 'single', { avoidEscape: true }],
     '@typescript-eslint/quotes': ['error', 'single', { avoidEscape: true }],
   },

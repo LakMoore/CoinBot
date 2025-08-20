@@ -2,7 +2,12 @@ import WebSocket from 'ws';
 import { TradingService } from './trading';
 import config from '../config';
 import { buildWsJwt } from '../utils/jwt';
-import { TickerMessage, Level2Message, UserMessage, WsEnvelope } from '../types/coinbase-ws';
+import {
+  TickerMessage,
+  Level2Message,
+  UserMessage,
+  WsEnvelope,
+} from '../types/coinbase-ws';
 
 export const setupWebSocket = async (tradingService: TradingService) => {
   const ws = new WebSocket('wss://advanced-trade-ws.coinbase.com');
@@ -11,9 +16,14 @@ export const setupWebSocket = async (tradingService: TradingService) => {
   const sendUserAuthSubscribe = () => {
     try {
       const apiKey = config.coinbase.apiKey;
-      const privateKey = (config.coinbase.apiSecret || '').replace(/\\n/g, '\n');
+      const privateKey = (config.coinbase.apiSecret || '').replace(
+        /\\n/g,
+        '\n'
+      );
       if (!apiKey || !privateKey) {
-        console.warn('API key/secret missing; skipping authenticated user channel subscription');
+        console.warn(
+          'API key/secret missing; skipping authenticated user channel subscription'
+        );
         return;
       }
       const jwt = buildWsJwt(apiKey, privateKey);
@@ -26,7 +36,10 @@ export const setupWebSocket = async (tradingService: TradingService) => {
       ws.send(JSON.stringify(authSubscribe));
       console.log('Sent authenticated subscribe to user channel');
     } catch (e) {
-      console.error('Failed to generate/send JWT for user channel subscription:', e);
+      console.error(
+        'Failed to generate/send JWT for user channel subscription:',
+        e
+      );
     }
   };
 
@@ -69,7 +82,7 @@ export const setupWebSocket = async (tradingService: TradingService) => {
       const message = JSON.parse(data.toString()) as WsEnvelope<any>;
 
       // console.log('message ', message);
-      
+
       // Handle ticker updates (events[0].tickers[0].price)
       if (message.channel === 'ticker' && message.events) {
         const tmsg = message as TickerMessage;
@@ -83,7 +96,7 @@ export const setupWebSocket = async (tradingService: TradingService) => {
             tradingService.updatePrice(currentPrice);
           }
         }
-        
+
         return;
       }
 
@@ -102,8 +115,10 @@ export const setupWebSocket = async (tradingService: TradingService) => {
         // For now, just log counts to verify receipt.
         const l2msg = message as Level2Message;
         const e0 = l2msg.events[0];
-        const bids = e0?.updates?.filter((u: any) => u.side === 'bid').length ?? 0;
-        const asks = e0?.updates?.filter((u: any) => u.side === 'ask').length ?? 0;
+        const bids =
+          e0?.updates?.filter((u: any) => u.side === 'bid').length ?? 0;
+        const asks =
+          e0?.updates?.filter((u: any) => u.side === 'ask').length ?? 0;
         console.log(`Level2 updates - bids: ${bids}, asks: ${asks}`);
         return;
       }

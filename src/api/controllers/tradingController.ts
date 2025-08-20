@@ -54,7 +54,7 @@ export const executeSell = async (req: Request, res: Response) => {
 export const getHistoricalData = async (req: Request, res: Response) => {
   try {
     const { start, end, granularity } = req.query;
-    
+
     // This would fetch historical data for backtesting
     // For now, return a placeholder
     res.json({

@@ -3,7 +3,12 @@ import { CoinbaseAdvTradeClient, CoinbaseAdvTradeCredentials, OrdersService, Acc
 import { OrderSide } from '@coinbase-sample/advanced-trade-sdk-ts/dist/model/enums/OrderSide';
 import { EventEmitter } from 'events';
 import { PriceService } from './prices';
-import { ListOrdersRequest } from '@coinbase-sample/advanced-trade-sdk-ts/dist/rest/orders/types';
+import {
+  ListOrdersRequest,
+  ListFillsRequest,
+} from '@coinbase-sample/advanced-trade-sdk-ts/dist/rest/orders/types';
+
+import { Order } from '@coinbase-sample/advanced-trade-sdk-ts/dist/model/Order';
 
 export class TradingService {
   private client: CoinbaseAdvTradeClient;
@@ -203,8 +208,8 @@ export class TradingService {
       let cursor: string | undefined = undefined;
       const accs: Array<{ currency?: string; availableBalance?: { value?: string } }> = [];
       do {
-        const resp: any = await this.accountsService.listAccounts({ limit: 250, cursor });
-        if (resp && 'accounts' in resp) {
+        const resp = await this.accountsService.listAccounts({ limit: 250, cursor });
+        if (this.hasAccounts(resp)) {
           accs.push(...(resp.accounts || []));
           cursor = resp.hasNext ? resp.cursor : undefined;
         } else {
@@ -272,10 +277,10 @@ export class TradingService {
 
     for (const row of this.portfolio.crypto) {
       const asset = row.asset;
-      // reset fields to avoid any stale values from previous iterations
-      row.avgEntryGbp = null as any;
-      row.pnlGbp = null as any;
-      row.pnlPct = null as any;
+      // reset fields to avoid stale values from previous iterations
+      row.avgEntryGbp = null;
+      row.pnlGbp = null;
+      row.pnlPct = null;
       try {
         // Prefer GBP orders, but also include other fiat-quoted orders we can convert (e.g., USD, EUR)
         const gbpMarket = `${asset}-GBP`;
@@ -284,7 +289,7 @@ export class TradingService {
         const ordersRaw = await this.fetchAllOrders({ productIds: [gbpMarket, usdMarket, eurMarket], limit: 250 });
         // Filter strictly to this asset and a fiat quote that we have an FX rate for
         const fxMap = fx || {};
-        const orders = (ordersRaw || []).filter((o: any) => {
+        const orders = (ordersRaw || []).filter((o: Order) => {
           const pid = (o.productId || '').toUpperCase();
           const parts = pid.split('-');
           if (parts.length !== 2) return false;
@@ -301,7 +306,7 @@ export class TradingService {
         }
 
         // Sort by createdTime ascending
-        orders.sort((a: any, b: any) => Date.parse(a.createdTime || '') - Date.parse(b.createdTime || ''));
+        orders.sort((a: Order, b: Order) => Date.parse(a.createdTime || '') - Date.parse(b.createdTime || ''));
 
         // Build FIFO lots from BUY orders using filledSize and averageFilledPrice (already GBP); consume with SELL orders
         type Lot = { qty: number; priceGbp: number };
@@ -314,9 +319,9 @@ export class TradingService {
           const side = (o.side || '').toString().toUpperCase();
           const qty = parseFloat(o.filledSize || '0');
           const avgPx = parseFloat(o.averageFilledPrice || '0');
-          const totalFees = parseFloat((o.totalFees as any) || '0');
-          const totalAfterFees = parseFloat((o.totalValueAfterFees as any) || '0');
-          const filledValue = parseFloat((o.filledValue as any) || '0');
+          const totalFees = this.toNumber((o as unknown as { totalFees?: unknown }).totalFees);
+          const totalAfterFees = this.toNumber((o as unknown as { totalValueAfterFees?: unknown }).totalValueAfterFees);
+          const filledValue = this.toNumber((o as unknown as { filledValue?: unknown }).filledValue);
           if (!isFinite(qty) || qty <= 0) continue; // only filled quantities matter
           // Determine quote currency and conversion to GBP
           const pid = (o.productId || '').toUpperCase();
@@ -388,16 +393,16 @@ export class TradingService {
     // Recompute totals with potential updated gbpValue (unchanged) but we added more fields
   }
 
-  private async fetchAllFills(params: { productIds?: string[]; limit?: number }) {
-    const all: any[] = [];
+  private async fetchAllFills(params: ListFillsRequest): Promise<unknown[]> {
+    const all: unknown[] = [];
     let cursor: string | undefined = undefined;
     do {
-      const req: any = { ...params, cursor };
-      const resp: any = await this.ordersService.listFills(req);
-      if (resp && 'fills' in resp) {
-        const fills = (resp.fills || []) as any[];
+      const req: ListFillsRequest = { ...params, cursor };
+      const resp: unknown = await this.ordersService.listFills(req);
+      if (this.hasFills(resp)) {
+        const fills = resp.fills || [];
         all.push(...fills);
-        cursor = (resp as any).cursor || undefined;
+        cursor = resp.cursor || undefined;
       } else {
         cursor = undefined;
       }
@@ -405,25 +410,60 @@ export class TradingService {
     return all;
   }
 
-  private async fetchAllOrders(params: { productIds?: string[]; orderSide?: any; limit?: number }) {
-    const all: any[] = [];
-    const ids = params.productIds && params.productIds.length ? params.productIds : [undefined as any];
+  private async fetchAllOrders(params: ListOrdersRequest): Promise<Order[]> {
+    const all: Order[] = [];
+    const pids = params.productIds && params.productIds.length ? params.productIds : undefined;
     // If multiple productIds are provided, fetch each separately to avoid server ignoring the filter
-    for (const pid of ids) {
+    const loopOver = pids ?? [undefined];
+    for (const pid of loopOver) {
       let cursor: string | undefined = undefined;
       do {
-        const req: any = {  };
-        const resp: any = await this.ordersService.listOrders(req);
-        if (resp && 'orders' in resp) {
-          const orders = (resp.orders || []) as any[];
+        const req: ListOrdersRequest = { ...params, productIds: pid ? [pid] : undefined, cursor };
+        const resp: unknown = await this.ordersService.listOrders(req);
+        if (this.hasOrders(resp)) {
+          const orders = (resp.orders || []) as Order[];
           all.push(...orders);
-          cursor = (resp as any).cursor || undefined;
+          cursor = resp.cursor || undefined;
         } else {
           cursor = undefined;
         }
       } while (cursor);
     }
     return all;
+  }
+
+  // --- Type guards & helpers to avoid explicit any ---
+  private hasAccounts(x: unknown): x is { accounts?: Array<{ currency?: string; availableBalance?: { value?: string } }>; hasNext?: boolean; cursor?: string } {
+    if (!x || typeof x !== 'object') return false;
+    const obj = x as { accounts?: unknown };
+    if (!('accounts' in obj)) return false;
+    const { accounts } = obj as { accounts?: unknown };
+    return accounts === undefined || Array.isArray(accounts);
+  }
+
+  private hasFills(x: unknown): x is { fills?: unknown[]; cursor?: string } {
+    if (!x || typeof x !== 'object') return false;
+    const obj = x as { fills?: unknown };
+    if (!('fills' in obj)) return false;
+    const { fills } = obj as { fills?: unknown };
+    return fills === undefined || Array.isArray(fills);
+  }
+
+  private hasOrders(x: unknown): x is { orders?: Order[]; cursor?: string } {
+    if (!x || typeof x !== 'object') return false;
+    const obj = x as { orders?: unknown };
+    if (!('orders' in obj)) return false;
+    const { orders } = obj as { orders?: unknown };
+    return orders === undefined || Array.isArray(orders);
+  }
+
+  private toNumber(u: unknown): number {
+    if (typeof u === 'number') return u;
+    if (typeof u === 'string') {
+      const n = parseFloat(u);
+      return Number.isFinite(n) ? n : NaN;
+    }
+    return NaN;
   }
 }
 

@@ -1,16 +1,5 @@
 # Default: text files use CRLF in working tree
-* text eol=crlf
-
-# Force LF for files that must be Unix-style
-*.sh text eol=lf
-*.bash text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
-*.md text eol=lf
-*.json text eol=lf
-*.yml.j2 text eol=lf
-Dockerfile text eol=lf
-.dockerignore text eol=lf
+* text=auto eol=lf
 
 # Treat these as binary (no EOL conversion)
 *.png binary

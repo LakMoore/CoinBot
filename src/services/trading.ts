@@ -229,10 +229,18 @@ export class TradingService {
   }
 
   public getStatus() {
+    const activationPrice =
+      this.highestPrice > 0
+        ? this.highestPrice *
+          (1 - config.trailingStop.activationThreshold / 100)
+        : 0;
     return {
       currentPosition: this.currentPosition,
       highestPrice: this.highestPrice,
       trailingStopPrice: this.trailingStopPrice,
+      activationPrice,
+      trailingPercent: config.trailingStop.percentage,
+      activationThresholdPercent: config.trailingStop.activationThreshold,
       isActive: this.isActive,
       tradingPair: config.trading.pair,
       latestPrice: this.latestPrice,

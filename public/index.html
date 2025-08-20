@@ -53,6 +53,14 @@
           <div id="stop" class="value">—</div>
         </div>
         <div class="metric">
+          <h3>Activation Price</h3>
+          <div id="activationPrice" class="value">—</div>
+        </div>
+        <div class="metric">
+          <h3>Config</h3>
+          <div id="configTrail" class="value" style="font-size:14px">—</div>
+        </div>
+        <div class="metric">
           <h3>Status</h3>
           <div id="active" class="value">—</div>
         </div>
@@ -115,6 +123,11 @@
       $('active').textContent = s.isActive ? 'Active' : 'Idle';
       $('active').className = 'value ' + (s.isActive ? 'green' : 'red');
       $('desired').textContent = s.desiredAction || '—';
+      $('activationPrice').textContent = fmt(s.activationPrice);
+      $('configTrail').textContent =
+        (typeof s.trailingPercent === 'number' && typeof s.activationThresholdPercent === 'number')
+          ? `${s.trailingPercent}% trail • ${s.activationThresholdPercent}% activate`
+          : '—';
 
       // Render portfolio (fiat and crypto)
       const pf = s.portfolio || { fiat: [], crypto: [], totals: { fiatGbp: 0, cryptoGbp: 0, grandGbp: 0 } };

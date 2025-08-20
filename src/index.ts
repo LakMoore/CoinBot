@@ -6,7 +6,7 @@ import fs from 'fs';
 import config from './config';
 import apiRoutes from './api/routes';
 import { setupWebSocket } from './services/websocket';
-import { TradingService } from './services/trading';
+import tradingService from './services/tradingInstance';
 
 // Initialize Express app
 const app = express();
@@ -19,8 +19,7 @@ app.use(morgan('dev'));
 // API Routes
 app.use('/api', apiRoutes);
 
-// Initialize Trading Service
-const tradingService = new TradingService();
+// Use shared Trading Service instance
 
 // Serve static status page (prefer dist/public when compiled)
 const distPublic = path.resolve(__dirname, 'public');

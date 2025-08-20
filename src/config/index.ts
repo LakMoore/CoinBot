@@ -29,9 +29,9 @@ const config: Config = {
   coinbase: {
     apiKey: process.env.COINBASE_API_KEY || '',
     apiSecret: process.env.COINBASE_API_SECRET || '',
-    baseUrl:
-      process.env.COINBASE_API_BASE_URL ||
-      'https://api-sandbox.coinbase.com/api/v3/brokerage/',
+    baseUrl: process.env.COINBASE_USE_PRODUCTION
+      ? 'https://api.coinbase.com/api/v3/brokerage/'
+      : 'https://api-sandbox.coinbase.com/api/v3/brokerage/',
   },
   trading: {
     pair: process.env.TRADING_PAIR || 'BTC-GBP',

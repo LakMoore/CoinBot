@@ -28,6 +28,10 @@ export class TradingService {
   private balances: Record<string, number> = {};
   private balancePollTimer: NodeJS.Timeout | null = null;
   private prices = new PriceService(60 * 1000);
+  // Prevent duplicate stop-loss executions while a sell is in-flight
+  private stopLossInFlight = false;
+  // Simple minimum quote amount to avoid dust orders (in quote currency, e.g., GBP)
+  private readonly minQuoteOrder = 5; // adjust if needed or make configurable
   private portfolio: {
     fiat: Array<{ currency: string; amount: number; gbpValue: number }>;
     crypto: Array<{
@@ -55,8 +59,15 @@ export class TradingService {
       config.coinbase.apiKey,
       normalizedSecret
     );
-    // this.client = new CoinbaseAdvTradeClient(credentials, config.coinbase.baseUrl);
-    this.client = new CoinbaseAdvTradeClient(credentials);
+    // Respect configured base URL if provided (e.g., sandbox vs prod)
+    if (config.coinbase.baseUrl && config.coinbase.baseUrl.trim().length > 0) {
+      this.client = new CoinbaseAdvTradeClient(
+        credentials,
+        config.coinbase.baseUrl
+      );
+    } else {
+      this.client = new CoinbaseAdvTradeClient(credentials);
+    }
     this.ordersService = new OrdersService(this.client);
     this.accountsService = new AccountsService(this.client);
   }
@@ -163,8 +174,35 @@ export class TradingService {
         currentPrice <= this.trailingStopPrice &&
         this.trailingStopPrice > 0
       ) {
+        if (this.stopLossInFlight) {
+          return; // already processing a stop-loss sell
+        }
         console.log(`Stop loss triggered at ${currentPrice}`);
-        this.executeSell(0 /* amount */);
+        // Sell based on base holdings converted to quote (we use quoteSize orders)
+        const { base } = this.parsePair();
+        const baseBal = base ? this.balances[base] || 0 : 0;
+        if (baseBal > 0 && isFinite(baseBal) && isFinite(currentPrice)) {
+          const quoteAmount = baseBal * currentPrice;
+          if (quoteAmount >= this.minQuoteOrder) {
+            this.stopLossInFlight = true;
+            // Fire and forget; ensure we clear the in-flight flag
+            this.executeSell(quoteAmount)
+              .catch((e) => console.error('Auto stop-loss sell failed:', e))
+              .finally(() => {
+                this.stopLossInFlight = false;
+              });
+          } else {
+            console.warn(
+              `Stop-loss computed quote amount (${quoteAmount.toFixed(
+                2
+              )}) below minimum (${this.minQuoteOrder.toFixed(2)}); skipping`
+            );
+          }
+        } else {
+          console.warn(
+            'Stop-loss intended to sell, but no base balance was available.'
+          );
+        }
       }
     }
     // Emit on every price update so UI stays current

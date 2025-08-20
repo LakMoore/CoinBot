@@ -1,9 +1,8 @@
 import type { Request, Response } from 'express';
-import { TradingService } from '../../services/trading';
+import tradingService from '../../services/tradingInstance';
 import config from '../../config';
 
-// Initialize trading service
-const tradingService = new TradingService();
+// Use shared TradingService instance
 
 /**
  * Get the current trading status

@@ -36,7 +36,7 @@ export type TickerMessage = WsEnvelope<TickerEvent> & { channel: 'ticker' };
 // Minimal user channel typing (can be extended later)
 export interface UserEvent {
   type: string;
-  [k: string]: any;
+  [k: string]: unknown;
 }
 export type UserMessage = WsEnvelope<UserEvent> & { channel: 'user' };
 
@@ -45,11 +45,11 @@ export interface Level2Update {
   side: 'bid' | 'ask' | string;
   price?: string;
   quantity?: string;
-  [k: string]: any;
+  [k: string]: unknown;
 }
 export interface Level2Event {
   type: string;
   updates?: Level2Update[];
-  [k: string]: any;
+  [k: string]: unknown;
 }
 export type Level2Message = WsEnvelope<Level2Event> & { channel: 'level2' };

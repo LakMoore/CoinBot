@@ -8,22 +8,22 @@ import {
 import { OrderSide } from '@coinbase-sample/advanced-trade-sdk-ts/dist/model/enums/OrderSide';
 import { EventEmitter } from 'events';
 import { PriceService } from './prices';
-import {
+import type {
   ListOrdersRequest,
   ListFillsRequest,
 } from '@coinbase-sample/advanced-trade-sdk-ts/dist/rest/orders/types';
 
-import { Order } from '@coinbase-sample/advanced-trade-sdk-ts/dist/model/Order';
+import type { Order } from '@coinbase-sample/advanced-trade-sdk-ts/dist/model/Order';
 
 export class TradingService {
   private client: CoinbaseAdvTradeClient;
   private ordersService: OrdersService;
   private accountsService: AccountsService;
-  private highestPrice: number = 0;
-  private trailingStopPrice: number = 0;
-  private isActive: boolean = false;
+  private highestPrice = 0;
+  private trailingStopPrice = 0;
+  private isActive = false;
   private currentPosition: 'LONG' | 'SHORT' | 'NONE' = 'NONE';
-  private latestPrice: number = 0;
+  private latestPrice = 0;
   private emitter = new EventEmitter();
   private balances: Record<string, number> = {};
   private balancePollTimer: NodeJS.Timeout | null = null;
@@ -541,9 +541,7 @@ export class TradingService {
   }
 
   // --- Type guards & helpers to avoid explicit any ---
-  private hasAccounts(
-    x: unknown
-  ): x is {
+  private hasAccounts(x: unknown): x is {
     accounts?: Array<{
       currency?: string;
       availableBalance?: { value?: string };

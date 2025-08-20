@@ -1,12 +1,13 @@
 import WebSocket from 'ws';
-import { TradingService } from './trading';
+import type { TradingService } from './trading';
 import config from '../config';
 import { buildWsJwt } from '../utils/jwt';
-import {
+import type {
   TickerMessage,
   Level2Message,
   UserMessage,
   WsEnvelope,
+  Level2Update,
 } from '../types/coinbase-ws';
 
 export const setupWebSocket = async (tradingService: TradingService) => {
@@ -51,15 +52,6 @@ export const setupWebSocket = async (tradingService: TradingService) => {
       channel: 'ticker',
     } as const;
     ws.send(JSON.stringify(tickerSubscribe));
-
-    // Subscribe to public level2 order book (no JWT)
-    const level2Subscribe = {
-      type: 'subscribe',
-      product_ids: [config.trading.pair],
-      channel: 'level2',
-    } as const;
-    // Uncomment to enable level2 stream
-    // ws.send(JSON.stringify(level2Subscribe));
   };
 
   ws.on('open', () => {
@@ -79,7 +71,7 @@ export const setupWebSocket = async (tradingService: TradingService) => {
 
   ws.on('message', (data: WebSocket.Data) => {
     try {
-      const message = JSON.parse(data.toString()) as WsEnvelope<any>;
+      const message = JSON.parse(data.toString()) as WsEnvelope<unknown>;
 
       // console.log('message ', message);
 
@@ -103,7 +95,8 @@ export const setupWebSocket = async (tradingService: TradingService) => {
       // Handle user channel events (orders, fills, etc.)
       if (message.channel === 'user' && message.events) {
         // Minimal handling: log event types. Extend as needed.
-        const types = message.events.map((e: any) => e.type).join(',');
+        const umsg = message as UserMessage;
+        const types = umsg.events.map((e) => e.type).join(',');
         console.log(`User channel events: ${types}`);
         // TODO: React to order updates/fills if needed
         return;
@@ -116,9 +109,11 @@ export const setupWebSocket = async (tradingService: TradingService) => {
         const l2msg = message as Level2Message;
         const e0 = l2msg.events[0];
         const bids =
-          e0?.updates?.filter((u: any) => u.side === 'bid').length ?? 0;
+          e0?.updates?.filter((u: Level2Update) => u.side === 'bid').length ??
+          0;
         const asks =
-          e0?.updates?.filter((u: any) => u.side === 'ask').length ?? 0;
+          e0?.updates?.filter((u: Level2Update) => u.side === 'ask').length ??
+          0;
         console.log(`Level2 updates - bids: ${bids}, asks: ${asks}`);
         return;
       }

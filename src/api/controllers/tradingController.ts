@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { TradingService } from '../../services/trading';
 import config from '../../config';
 

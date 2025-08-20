@@ -24,12 +24,12 @@ function derToJose(signature: Buffer, keySize: number): Buffer {
   }
   if (signature[offset++] !== 0x02)
     throw new Error('Invalid DER signature (no r int)');
-  let rLen = signature[offset++];
+  const rLen = signature[offset++];
   let r = signature.slice(offset, offset + rLen);
   offset += rLen;
   if (signature[offset++] !== 0x02)
     throw new Error('Invalid DER signature (no s int)');
-  let sLen = signature[offset++];
+  const sLen = signature[offset++];
   let s = signature.slice(offset, offset + sLen);
 
   // Remove leading zeros and left-pad to keySize

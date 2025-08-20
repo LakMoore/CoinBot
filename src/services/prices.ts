@@ -27,7 +27,7 @@ export class PriceService {
     const url = 'https://api.coinbase.com/v2/exchange-rates?currency=GBP';
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`FX fetch failed: ${resp.status}`);
-    const json: any = await resp.json();
+    const json = await resp.json();
     const rates = json?.data?.rates || {};
     const inv: RatesMap = {};
     for (const [ccy, v] of Object.entries(rates)) {
@@ -54,10 +54,12 @@ export class PriceService {
     try {
       const r = await fetch(gbpUrl);
       if (r.ok) {
-        const j: any = await r.json();
+        const j = await r.json();
         price = Number(j?.data?.amount);
       }
-    } catch {}
+    } catch (e) {
+      console.warn('Failed to fetch GBP spot price:', e);
+    }
 
     if (price == null || !isFinite(price)) {
       // Fallback via USD
@@ -65,7 +67,7 @@ export class PriceService {
         const usdUrl = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`;
         const r2 = await fetch(usdUrl);
         if (r2.ok) {
-          const j2: any = await r2.json();
+          const j2 = await r2.json();
           const usd = Number(j2?.data?.amount);
           if (isFinite(usd)) {
             const fx = await this.getFiatToGBP();
@@ -73,7 +75,9 @@ export class PriceService {
             if (usdToGbp) price = usd * usdToGbp;
           }
         }
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to fetch USD spot price:', e);
+      }
     }
 
     if (price != null && isFinite(price)) {

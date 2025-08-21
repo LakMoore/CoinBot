@@ -8,6 +8,8 @@
     "build": "tsc",
     "postbuild": "node scripts/copy-public.js",
     "dev": "ts-node-dev --respawn --transpile-only --inspect=9229 src/index.ts",
+    "backtest": "ts-node src/backtest/runner.ts",
+    "fetch:candles": "ts-node src/backtest/fetchCandles.ts",
     "test": "jest",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\""

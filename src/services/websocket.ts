@@ -17,7 +17,7 @@ export const setupWebSocket = async (tradingService: TradingService) => {
   const sendUserAuthSubscribe = () => {
     try {
       const apiKey = config.coinbase.apiKey;
-      const privateKey = (config.coinbase.apiSecret || '').replace(
+      const privateKey = (config.coinbase.apiPrivateKey || '').replace(
         /\\n/g,
         '\n'
       );

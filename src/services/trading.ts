@@ -1,10 +1,12 @@
 import config from '../config';
+import { EntryExitStrategy } from '../strategy/entryExit';
+import type { Position } from '../strategy/entryExit';
 import {
   CoinbaseAdvTradeClient,
   CoinbaseAdvTradeCredentials,
   OrdersService,
   AccountsService,
-} from '@coinbase-sample/advanced-trade-sdk-ts';
+} from '@coinbase-sample/advanced-trade-sdk-ts/dist';
 import { OrderSide } from '@coinbase-sample/advanced-trade-sdk-ts/dist/model/enums/OrderSide';
 import { EventEmitter } from 'events';
 import { PriceService } from './prices';
@@ -19,9 +21,6 @@ export class TradingService {
   private client: CoinbaseAdvTradeClient;
   private ordersService: OrdersService;
   private accountsService: AccountsService;
-  private highestPrice = 0;
-  private trailingStopPrice = 0;
-  private isActive = false;
   private currentPosition: 'LONG' | 'SHORT' | 'NONE' = 'NONE';
   private latestPrice = 0;
   private emitter = new EventEmitter();
@@ -32,6 +31,7 @@ export class TradingService {
   private stopLossInFlight = false;
   // Simple minimum quote amount to avoid dust orders (in quote currency, e.g., GBP)
   private readonly minQuoteOrder = 5; // adjust if needed or make configurable
+  private strategy = new EntryExitStrategy();
   private portfolio: {
     fiat: Array<{ currency: string; amount: number; gbpValue: number }>;
     crypto: Array<{
@@ -51,13 +51,13 @@ export class TradingService {
   };
 
   constructor() {
-    const normalizedSecret = (config.coinbase.apiSecret || '').replace(
+    const normalizedPrivateKey = (config.coinbase.apiPrivateKey || '').replace(
       /\\n/g,
       '\n'
     );
     const credentials = new CoinbaseAdvTradeCredentials(
       config.coinbase.apiKey,
-      normalizedSecret
+      normalizedPrivateKey
     );
     // Respect configured base URL if provided (e.g., sandbox vs prod)
     if (config.coinbase.baseUrl && config.coinbase.baseUrl.trim().length > 0) {
@@ -117,8 +117,6 @@ export class TradingService {
 
       // Update state post order placement
       this.currentPosition = 'LONG';
-      this.highestPrice = await this.getCurrentPrice();
-      this.updateTrailingStop();
       this.emitStatus();
       return { success: true, response };
     } catch (error) {
@@ -158,69 +156,80 @@ export class TradingService {
     }
   }
 
+  // Place a market SELL using baseSize (e.g., sell X BTC)
+  public async executeSellBase(baseAmount: number) {
+    try {
+      console.log(
+        `Executing base-size sell order for ${baseAmount} ${config.trading.pair}`
+      );
+      if (!baseAmount || baseAmount <= 0) {
+        throw new Error('Sell base amount must be greater than 0');
+      }
+
+      const request = {
+        clientOrderId: `bot-${Date.now()}`,
+        productId: config.trading.pair,
+        side: OrderSide.Sell,
+        orderConfiguration: {
+          marketMarketIoc: {
+            baseSize: baseAmount.toString(),
+          },
+        },
+      } as const;
+
+      const response = await this.ordersService.createOrder(request);
+      console.log('Sell (base) order response:', response);
+
+      this.currentPosition = 'NONE';
+      this.emitStatus();
+      return { success: true, response };
+    } catch (error) {
+      console.error('Error executing base-size sell order:', error);
+      throw error;
+    }
+  }
+
   public updatePrice(currentPrice: number) {
     // Always cache the latest observed price
     this.latestPrice = currentPrice;
-
-    if (this.currentPosition === 'LONG') {
-      // Update highest price if current price is higher
-      if (currentPrice > this.highestPrice) {
-        this.highestPrice = currentPrice;
-        this.updateTrailingStop();
+    // Strategy-driven decisions
+    const pos: Position = this.currentPosition === 'LONG' ? 'LONG' : 'NONE';
+    const signal = this.strategy.nextSignal(
+      pos,
+      new Date().toISOString(),
+      currentPrice
+    );
+    if (signal === 'SELL' && pos === 'LONG') {
+      if (this.stopLossInFlight) {
+        this.emitStatus();
+        return;
       }
-
-      // Check if stop loss is triggered
-      if (
-        currentPrice <= this.trailingStopPrice &&
-        this.trailingStopPrice > 0
-      ) {
-        if (this.stopLossInFlight) {
-          return; // already processing a stop-loss sell
+      const { base } = this.parsePair();
+      const baseBal = base ? this.balances[base] || 0 : 0;
+      if (baseBal > 0 && isFinite(baseBal) && isFinite(currentPrice)) {
+        const quoteAmount = baseBal * currentPrice;
+        if (quoteAmount >= this.minQuoteOrder) {
+          this.stopLossInFlight = true;
+          this.executeSellBase(baseBal)
+            .then(() => this.strategy.notifyExecuted('NONE', currentPrice))
+            .catch((e) => console.error('Strategy sell failed:', e))
+            .finally(() => {
+              this.stopLossInFlight = false;
+            });
         }
-        console.log(`Stop loss triggered at ${currentPrice}`);
-        // Sell based on base holdings converted to quote (we use quoteSize orders)
-        const { base } = this.parsePair();
-        const baseBal = base ? this.balances[base] || 0 : 0;
-        if (baseBal > 0 && isFinite(baseBal) && isFinite(currentPrice)) {
-          const quoteAmount = baseBal * currentPrice;
-          if (quoteAmount >= this.minQuoteOrder) {
-            this.stopLossInFlight = true;
-            // Fire and forget; ensure we clear the in-flight flag
-            this.executeSell(quoteAmount)
-              .catch((e) => console.error('Auto stop-loss sell failed:', e))
-              .finally(() => {
-                this.stopLossInFlight = false;
-              });
-          } else {
-            console.warn(
-              `Stop-loss computed quote amount (${quoteAmount.toFixed(
-                2
-              )}) below minimum (${this.minQuoteOrder.toFixed(2)}); skipping`
-            );
-          }
-        } else {
-          console.warn(
-            'Stop-loss intended to sell, but no base balance was available.'
-          );
-        }
+      }
+    } else if (signal === 'BUY' && pos === 'NONE') {
+      const { quote } = this.parsePair();
+      const quoteBal = quote ? this.balances[quote] || 0 : 0;
+      const buyAmt = config.trading.amount; // in quote currency (e.g., GBP)
+      if (quoteBal >= buyAmt && buyAmt >= this.minQuoteOrder) {
+        this.executeBuy(buyAmt)
+          .then(() => this.strategy.notifyExecuted('LONG', currentPrice))
+          .catch((e) => console.error('Strategy buy failed:', e));
       }
     }
     // Emit on every price update so UI stays current
     this.emitStatus();
-  }
-
-  private updateTrailingStop() {
-    if (this.highestPrice > 0) {
-      const activationPrice =
-        this.highestPrice * (1 - config.trailingStop.activationThreshold / 100);
-      this.trailingStopPrice =
-        this.highestPrice * (1 - config.trailingStop.percentage / 100);
-
-      if (!this.isActive && this.highestPrice >= activationPrice) {
-        this.isActive = true;
-        console.log('Trailing stop activated');
-      }
-    }
   }
 
   private async getCurrentPrice(): Promise<number> {
@@ -229,24 +238,14 @@ export class TradingService {
   }
 
   public getStatus() {
-    const activationPrice =
-      this.highestPrice > 0
-        ? this.highestPrice *
-          (1 - config.trailingStop.activationThreshold / 100)
-        : 0;
     return {
       currentPosition: this.currentPosition,
-      highestPrice: this.highestPrice,
-      trailingStopPrice: this.trailingStopPrice,
-      activationPrice,
-      trailingPercent: config.trailingStop.percentage,
-      activationThresholdPercent: config.trailingStop.activationThreshold,
-      isActive: this.isActive,
       tradingPair: config.trading.pair,
       latestPrice: this.latestPrice,
       balances: this.balances,
       desiredAction: this.getDesiredAction(),
       portfolio: this.portfolio,
+      strategy: this.strategy.status(),
     };
   }
 
@@ -348,6 +347,7 @@ export class TradingService {
       pnlPct?: number | null;
     }> = [];
 
+    const cryptoEntries: Array<{ asset: string; amount: number }> = [];
     for (const [ccy, amt] of Object.entries(this.balances)) {
       if (!amt || !isFinite(amt) || amt <= 0) continue;
       if (this.isFiat(ccy)) {
@@ -355,18 +355,47 @@ export class TradingService {
         const gbpValue = toGbp ? amt * toGbp : 0;
         fiat.push({ currency: ccy, amount: amt, gbpValue });
       } else {
-        const gbpPrice = await this.prices.getCryptoGbpPrice(ccy);
-        const gbpValue = gbpPrice != null ? amt * gbpPrice : null;
-        crypto.push({
-          asset: ccy,
-          amount: amt,
-          gbpPrice,
-          gbpValue,
-          avgEntryGbp: null,
-          pnlGbp: null,
-          pnlPct: null,
-        });
+        cryptoEntries.push({ asset: ccy, amount: amt });
       }
+    }
+
+    // Fetch crypto GBP prices with limited concurrency (e.g., 5)
+    const limit = 5;
+    let idx = 0;
+    const results: Array<{
+      asset: string;
+      amount: number;
+      gbpPrice: number | null;
+    }> = [];
+    const runNext = async (): Promise<void> => {
+      const i = idx++;
+      if (i >= cryptoEntries.length) return;
+      const { asset, amount } = cryptoEntries[i];
+      try {
+        const gbpPrice = await this.prices.getCryptoGbpPrice(asset);
+        results.push({ asset, amount, gbpPrice });
+      } catch {
+        results.push({ asset, amount, gbpPrice: null });
+      }
+      await runNext();
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(limit, cryptoEntries.length) }, () =>
+        runNext()
+      )
+    );
+
+    for (const r of results) {
+      const gbpValue = r.gbpPrice != null ? r.amount * r.gbpPrice : null;
+      crypto.push({
+        asset: r.asset,
+        amount: r.amount,
+        gbpPrice: r.gbpPrice,
+        gbpValue,
+        avgEntryGbp: null,
+        pnlGbp: null,
+        pnlPct: null,
+      });
     }
 
     // sort by value desc
